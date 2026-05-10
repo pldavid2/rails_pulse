@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.5; color: #1f2937; background-color: #f3f4f6; margin: 0; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+    .header { background-color: <%= @exception_group.recently_reopened? ? '#d97706' : '#ffc91f' %>; color: #1f2937; padding: 20px; }
+    .header h1 { margin: 0; font-size: 18px; }
+    .content { padding: 20px; }
+    .meta { margin: 15px 0; }
+    .meta-row { padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .meta-label { color: #6b7280; display: inline-block; width: 120px; }
+    .meta-value { color: #1f2937; }
+    .code { font-family: monospace; font-size: 13px; background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
+    .backtrace { background-color: #f9fafb; color: #1f2937; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb; font-size: 12px; font-family: monospace; overflow-x: auto; white-space: pre-wrap; }
+    .footer { padding: 15px 20px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; background-color: #fef3c7; color: #92400e; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <% if @exception_group.recently_reopened? %>
+        <span class="badge">REOPENED</span>
+      <% end %>
+      <h1><%= @exception_group.exception_class %></h1>
+      <p style="margin: 5px 0 0 0; opacity: 0.9;"><%= @app_name %></p>
+    </div>
+    <div class="content">
+      <p style="font-size: 16px; margin-top: 0;"><%= @exception_group.message %></p>
+      <div class="meta">
+        <div class="meta-row">
+          <span class="meta-label">Occurrences</span>
+          <span class="meta-value"><strong><%= @exception_group.occurrence_count %></strong></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">First seen</span>
+          <span class="meta-value"><%= @exception_group.first_seen_at&.strftime('%Y-%m-%d %H:%M:%S UTC') %></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Last seen</span>
+          <span class="meta-value"><%= @exception_group.last_seen_at&.strftime('%Y-%m-%d %H:%M:%S UTC') %></span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Location</span>
+          <span class="meta-value"><span class="code"><%= @exception_group.source_location || "unknown" %></span></span>
+        </div>
+        <% if @occurrence.user_identifier.present? %>
+          <div class="meta-row">
+            <span class="meta-label">User</span>
+            <span class="meta-value"><%= @occurrence.user_identifier %></span>
+          </div>
+        <% end %>
+        <% if @occurrence.request_url.present? %>
+          <div class="meta-row">
+            <span class="meta-label">Request</span>
+            <span class="meta-value"><%= @occurrence.request_method %> <%= @occurrence.request_url.to_s.truncate(60) %></span>
+          </div>
+        <% end %>
+      </div>
+      <% app_frames = (@occurrence.backtrace || []).select { |f| f["file"].to_s.match?(%r{/app/}) && !f["file"].to_s.match?(%r{/gems/}) }.first(8) %>
+      <% if app_frames.any? %>
+        <h3 style="margin-bottom: 10px; font-size: 14px;">Stack Trace</h3>
+        <div class="backtrace"><%= app_frames.map { |f| "#{f['file'].sub(Rails.root.to_s + '/', '')}:#{f['line']}:in '#{f['method']}'" }.join("\n") %></div>
+      <% end %>
+    </div>
+    <div style="padding: 15px 20px; text-align: center;">
+      <a href="<%= @occurrence_url %>" style="display: inline-block; padding: 10px 24px; background-color: #ffc91f; color: #1f2937; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">View in Dashboard</a>
+    </div>
+    <div class="footer">
+      Captured by Rails Pulse at <%= @occurrence.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') %>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,41 +1,135 @@
 <%= render 'rails_pulse/components/page_header' %>
 
-<%= render 'rails_pulse/components/panel', title: 'Occurrence Details' do %>
-  <dl class="descriptive-list mbs-4">
-    <dt>Exception</dt>
-    <dd><code><%= @occurrence.exception_class %></code></dd>
-    <dt>Message</dt>
-    <dd><%= @occurrence.message.presence || "—" %></dd>
-    <dt>Occurred At</dt>
-    <dd><%= human_readable_occurred_at(@occurrence.occurred_at) %></dd>
-    <% if @occurrence.request_url.present? %>
-      <dt>Request</dt>
-      <dd><%= @occurrence.request_method %> <%= @occurrence.request_url %></dd>
-    <% end %>
-    <dt>Environment</dt>
-    <dd><%= @occurrence.environment.presence || "—" %></dd>
-    <% if @occurrence.deploy_sha.present? %>
-      <dt>Deploy SHA</dt>
-      <dd><code><%= @occurrence.deploy_sha %></code></dd>
-    <% end %>
-  </dl>
+<%# Header %>
+<%= render 'rails_pulse/components/panel', {} do %>
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-lg font-bold"><%= @occurrence.exception_class %></h2>
+      <p class="text-muted"><%= @occurrence.message.presence || "—" %></p>
+      <p class="text-xs text-subtle mt-1">
+        <%= human_readable_occurred_at(@occurrence.occurred_at) %>
+        <% if @occurrence.environment.present? %> · <%= @occurrence.environment %><% end %>
+        <% if @occurrence.hostname.present? %> · <%= @occurrence.hostname %><% end %>
+        <% if @occurrence.deploy_sha.present? %> · <code><%= @occurrence.deploy_sha %></code><% end %>
+      </p>
+    </div>
+    <%= link_to "Back to group", exception_path(@exception_group), class: "btn btn--borderless" %>
+  </div>
 <% end %>
 
-<% if @occurrence.request_params.present? %>
-  <%= render 'rails_pulse/components/panel', title: 'Request Params' do %>
+<%# Request + Params side by side %>
+<% if @occurrence.request_url.present? %>
+  <div class="flex gap" style="align-items: flex-start;">
+    <div style="flex: 1; min-width: 0;">
+      <%= render 'rails_pulse/components/panel', title: 'Request' do %>
+        <div class="exception-params mbs-4">
+          <div class="exception-params__row">
+            <span class="exception-params__key">Method</span>
+            <span class="exception-params__value"><code><%= @occurrence.request_method %></code></span>
+          </div>
+          <div class="exception-params__row">
+            <span class="exception-params__key">URL</span>
+            <span class="exception-params__value"><%= @occurrence.request_url %></span>
+          </div>
+          <% if @occurrence.ip_address.present? %>
+            <div class="exception-params__row">
+              <span class="exception-params__key">IP Address</span>
+              <span class="exception-params__value"><%= @occurrence.ip_address %></span>
+            </div>
+          <% end %>
+          <% if @occurrence.user_agent.present? %>
+            <div class="exception-params__row">
+              <span class="exception-params__key">User Agent</span>
+              <span class="exception-params__value"><%= @occurrence.user_agent %></span>
+            </div>
+          <% end %>
+          <% if @occurrence.user_identifier.present? %>
+            <div class="exception-params__row">
+              <span class="exception-params__key">User</span>
+              <span class="exception-params__value"><%= @occurrence.user_identifier %></span>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+    <% if @occurrence.request_params.present? %>
+      <div style="flex: 1; min-width: 0;">
+        <%= render 'rails_pulse/components/panel', title: 'Request Params' do %>
+          <div class="exception-params mbs-4">
+            <% @occurrence.request_params.each do |key, value| %>
+              <div class="exception-params__row">
+                <span class="exception-params__key"><%= key %></span>
+                <span class="exception-params__value"><%= value.inspect %></span>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+<% end %>
+
+<%# Source + Variables side by side %>
+<div class="flex gap" style="align-items: flex-start;">
+  <% if @source_context %>
+    <div style="flex: 1; min-width: 0;">
+      <%= render 'rails_pulse/components/panel', {} do %>
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-half">
+            <strong class="text-sm">Source</strong>
+            <span class="text-xs text-subtle">at raise point</span>
+          </div>
+          <span class="text-xs text-subtle"><%= @source_context[:file_path] %></span>
+        </div>
+        <div class="backtrace__source backtrace__source--raise">
+          <% @source_context[:lines].each do |line| %>
+            <div class="backtrace__source-line <%= 'backtrace__source-line--current' if line[:current] %>">
+              <span class="backtrace__source-lineno"><%= line[:number] %></span>
+              <span class="backtrace__source-code"><%= format_source_line(line[:code]) %></span>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+
+  <% if @local_variables.any? %>
+    <div style="<%= @source_context ? 'flex: 0 0 400px;' : 'flex: 1;' %>">
+      <%= render 'rails_pulse/components/panel', {} do %>
+        <div class="flex items-center gap-half mb-2">
+          <strong class="text-sm">Variables</strong>
+          <span class="text-xs text-subtle">at raise point</span>
+        </div>
+        <div class="exception-params">
+          <% @local_variables.each do |name, value| %>
+            <div class="exception-params__row">
+              <span class="exception-params__key"><code><%= name %></code></span>
+              <span class="exception-params__value"><pre style="margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow: auto;"><%= h(value.is_a?(String) ? value : JSON.pretty_generate(value)) rescue h(value.inspect) %></pre></span>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+</div>
+
+<%# Backtrace %>
+<% if @occurrence.backtrace.present? %>
+  <%= render 'rails_pulse/components/panel', title: 'Backtrace' do %>
+    <%= render 'rails_pulse/exceptions/backtrace', backtrace: @occurrence.backtrace %>
+  <% end %>
+<% end %>
+
+<%# Custom Context %>
+<% if @custom_context.any? %>
+  <%= render 'rails_pulse/components/panel', title: 'Custom Context' do %>
     <div class="exception-params mbs-4">
-      <% @occurrence.request_params.each do |key, value| %>
+      <% @custom_context.each do |key, value| %>
         <div class="exception-params__row">
           <span class="exception-params__key"><%= key %></span>
           <span class="exception-params__value"><%= value.inspect %></span>
         </div>
       <% end %>
     </div>
-  <% end %>
-<% end %>
-
-<% if @occurrence.backtrace.present? %>
-  <%= render 'rails_pulse/components/panel', title: 'Backtrace' do %>
-    <%= render 'rails_pulse/exceptions/backtrace', backtrace: @occurrence.backtrace %>
   <% end %>
 <% end %>

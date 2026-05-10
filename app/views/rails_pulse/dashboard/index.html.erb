@@ -1,3 +1,4 @@
+
 <div class="dashboard-health-bar">
   <div class="dashboard-health-bar__content">
     <div class="dashboard-health-bar__badges">
@@ -19,6 +20,12 @@
       name: "Storage",
       health: @health_summary[:storage],
       critical_label: "critical" %>
+      <% if @health_summary[:errors] %>
+        <%= render "rails_pulse/dashboard/health_badge",
+        name: "Exceptions",
+        health: @health_summary[:errors],
+        critical_label: "unresolved" %>
+      <% end %>
     </div>
   </div>
 </div>

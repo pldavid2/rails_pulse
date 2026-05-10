@@ -1,24 +1,57 @@
 <%= render 'rails_pulse/components/page_header' %>
 
-<%= render 'rails_pulse/components/panel', title: 'Exception Details' do %>
-  <dl class="descriptive-list mbs-4">
-    <dt>Class</dt>
-    <dd><code><%= @exception_group.exception_class %></code></dd>
-    <dt>Message</dt>
-    <dd><%= @exception_group.message.presence || "—" %></dd>
-    <dt>First Seen</dt>
-    <dd><%= human_readable_occurred_at(@exception_group.first_seen_at) %></dd>
-    <dt>Last Seen</dt>
-    <dd><%= human_readable_occurred_at(@exception_group.last_seen_at) %></dd>
-    <dt>Total Occurrences</dt>
-    <dd><%= number_with_delimiter(@exception_group.occurrence_count) %></dd>
-  </dl>
+<%= render 'rails_pulse/components/panel', {} do %>
+  <div class="flex items-start justify-between">
+    <div style="flex: 1;">
+      <div class="flex items-center gap-half mb-2">
+        <%
+          badge_style = case @exception_group.status
+            when "unresolved" then "background: color-mix(in srgb, var(--color-negative) 12%, transparent); border-color: color-mix(in srgb, var(--color-negative) 30%, transparent); color: var(--color-negative);"
+            when "resolved" then "background: color-mix(in srgb, var(--color-positive) 12%, transparent); border-color: color-mix(in srgb, var(--color-positive) 30%, transparent); color: var(--color-positive);"
+            else "background: color-mix(in srgb, var(--color-text-subtle) 12%, transparent); border-color: color-mix(in srgb, var(--color-text-subtle) 30%, transparent); color: var(--color-text-subtle);"
+          end
+        %>
+        <span class="badge" style="<%= badge_style %>"><%= @exception_group.status.upcase %></span>
+      </div>
+      <h2 class="text-xl font-bold" style="margin: 8px 0 4px;"><%= @exception_group.exception_class %></h2>
+      <p class="text-muted" style="word-break: break-word;"><%= @exception_group.message.presence || "—" %></p>
+    </div>
+    <div class="flex gap" style="flex-shrink: 0; margin-left: 16px;">
+      <% if @exception_group.status != "resolved" %>
+        <%= button_to "Resolve", resolve_exception_path(@exception_group), method: :post, class: "btn badge--positive" %>
+      <% else %>
+        <%= button_to "Reopen", unresolve_exception_path(@exception_group), method: :post, class: "btn" %>
+      <% end %>
+      <% if @exception_group.status != "ignored" %>
+        <%= button_to "Ignore", ignore_exception_path(@exception_group), method: :post, class: "btn" %>
+      <% end %>
+      <%= button_to "Delete", exception_path(@exception_group), method: :delete, class: "btn badge--negative", data: { turbo_confirm: "Delete this exception group and all occurrences?" } %>
+    </div>
+  </div>
+
+  <div class="flex gap" style="margin-top: 16px;">
+    <div class="card" style="flex: 1; padding: 16px;">
+      <div class="text-xs text-subtle uppercase font-semibold">Occurrences</div>
+      <div class="text-2xl font-bold"><%= number_with_delimiter(@exception_group.occurrence_count) %></div>
+    </div>
+    <div class="card" style="flex: 1; padding: 16px;">
+      <div class="text-xs text-subtle uppercase font-semibold">First Seen</div>
+      <div class="text-2xl font-bold"><%= human_readable_occurred_at(@exception_group.first_seen_at) %></div>
+    </div>
+    <div class="card" style="flex: 1; padding: 16px;">
+      <div class="text-xs text-subtle uppercase font-semibold">Last Seen</div>
+      <div class="text-2xl font-bold"><%= human_readable_occurred_at(@exception_group.last_seen_at) %></div>
+    </div>
+  </div>
 <% end %>
 
-<% if @latest_occurrence&.backtrace.present? %>
-  <%= render 'rails_pulse/components/panel', title: 'Most Recent Backtrace' do %>
-    <%= render 'rails_pulse/exceptions/backtrace', backtrace: @latest_occurrence.backtrace %>
-  <% end %>
+<%
+  chart_series_data = @chart_data.map { |date, count| [Date.parse(date.to_s).to_time.to_i * 1000, count] rescue [date.to_s, count] }
+  chart = { series: [{ name: "Exceptions", type: "bar", data: chart_series_data, color: RailsPulse::ChartColors::DEFAULT }] }
+%>
+
+<%= render 'rails_pulse/components/panel', title: 'Occurrences Over Time' do %>
+  <%= render_stimulus_chart(chart, type: "bar", id: "exceptions_show_chart") %>
 <% end %>
 
 <%= render 'rails_pulse/components/panel', title: 'Occurrences' do %>

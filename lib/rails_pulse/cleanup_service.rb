@@ -41,14 +41,18 @@ module RailsPulse
       RailsPulse.logger.info "Time-based cleanup: removing records older than #{cutoff_time}"
 
       # Clean up in order that respects foreign key constraints
-      @stats[:time_based][:operations]            = cleanup_operations_by_time(cutoff_time)
-      @stats[:time_based][:job_runs]              = cleanup_job_runs_by_time(cutoff_time)
-      @stats[:time_based][:requests]              = cleanup_requests_by_time(cutoff_time)
-      @stats[:time_based][:queries]               = cleanup_queries_by_time(cutoff_time)
-      @stats[:time_based][:routes]                = cleanup_routes_by_time(cutoff_time)
-      @stats[:time_based][:jobs]                  = cleanup_jobs_by_time(cutoff_time)
-      @stats[:time_based][:exception_occurrences] = cleanup_exception_occurrences_by_time(cutoff_time)
-      @stats[:time_based][:exception_groups]      = cleanup_orphaned_exception_groups
+      @stats[:time_based][:operations] = cleanup_operations_by_time(cutoff_time)
+      @stats[:time_based][:job_runs]   = cleanup_job_runs_by_time(cutoff_time)
+      @stats[:time_based][:requests]   = cleanup_requests_by_time(cutoff_time)
+      @stats[:time_based][:queries]    = cleanup_queries_by_time(cutoff_time)
+      @stats[:time_based][:routes]     = cleanup_routes_by_time(cutoff_time)
+      @stats[:time_based][:jobs]       = cleanup_jobs_by_time(cutoff_time)
+
+      if RailsPulse.configuration.track_exceptions
+        exception_cutoff = (RailsPulse.configuration.exception_tracking[:retention_period] || @config.full_retention_period).ago
+        @stats[:time_based][:exception_occurrences] = cleanup_exception_occurrences_by_time(exception_cutoff)
+        @stats[:time_based][:exception_groups]      = cleanup_orphaned_exception_groups
+      end
     end
 
     def perform_count_based_cleanup
@@ -65,14 +69,16 @@ module RailsPulse
       ops_scope = cutoff ? RailsPulse::Operation.where("occurred_at < ?", cutoff) : RailsPulse::Operation.none
 
       # Clean up in order that respects foreign key constraints
-      @stats[:count_based][:operations]            = cleanup_by_count(RailsPulse::Operation, :rails_pulse_operations, order_column: :occurred_at, scope: ops_scope)
-      @stats[:count_based][:job_runs]              = cleanup_job_runs_by_count
-      @stats[:count_based][:requests]              = cleanup_requests_by_count
-      @stats[:count_based][:queries]               = cleanup_queries_by_count
-      @stats[:count_based][:routes]                = cleanup_routes_by_count
-      @stats[:count_based][:jobs]                  = cleanup_jobs_by_count
-      @stats[:count_based][:exception_occurrences] = cleanup_exception_occurrences_by_count
-      @stats[:count_based][:exception_groups]      = cleanup_orphaned_exception_groups
+      @stats[:count_based][:operations] = cleanup_by_count(RailsPulse::Operation, :rails_pulse_operations, order_column: :occurred_at, scope: ops_scope)
+      @stats[:count_based][:job_runs]   = cleanup_job_runs_by_count
+      @stats[:count_based][:requests]   = cleanup_requests_by_count
+      @stats[:count_based][:queries]    = cleanup_queries_by_count
+      @stats[:count_based][:routes]     = cleanup_routes_by_count
+      @stats[:count_based][:jobs]       = cleanup_jobs_by_count
+      if RailsPulse.configuration.track_exceptions
+        @stats[:count_based][:exception_occurrences] = cleanup_exception_occurrences_by_count
+        @stats[:count_based][:exception_groups]      = cleanup_orphaned_exception_groups
+      end
     end
 
     # Shared helper: delete oldest records beyond a configured max count

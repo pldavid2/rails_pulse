@@ -90,7 +90,7 @@
     </header>
     <% end %>
 
-    <main id="main">
+    <main id="main" tabindex="-1" autofocus style="outline: none;">
       <div class="container flex flex-col gap">
         <% if !@has_summaries %>
           <%= render 'layouts/rails_pulse/setup_screen' %>

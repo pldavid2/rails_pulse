@@ -9,8 +9,6 @@ module RailsPulse
                   :ignored_queues,
                   :track_assets,
                   :track_jobs,
-                  :track_exceptions,
-                  :capture_exception_params,
                   :custom_asset_patterns,
                   :mount_path,
                   :full_retention_period,
@@ -29,7 +27,12 @@ module RailsPulse
                   :async,
                   :service_level_objectives,
                   :query_service_level_objectives,
-                  :warn_on_stale_summaries
+                  :warn_on_stale_summaries,
+                  # Exception tracking (hash — see defaults below)
+                  :track_exceptions,
+                  :exception_tracking,
+                  # Notifications (hash — see defaults below)
+                  :notifications
 
     # Read-only access to thresholds (use setters for validation)
     attr_reader :route_thresholds,
@@ -50,8 +53,6 @@ module RailsPulse
       @ignored_queues = []
       @track_assets = false
       @track_jobs = false
-      @track_exceptions = true
-      @capture_exception_params = true
       @custom_asset_patterns = []
       @mount_path = nil
       @full_retention_period = 30.days
@@ -92,6 +93,65 @@ module RailsPulse
 
       # Show a warning banner when summaries haven't been generated recently
       @warn_on_stale_summaries = true
+
+      # Exception tracking defaults
+      @track_exceptions = true
+      @exception_tracking = {
+        capture_method: :middleware,
+        capture_params: true,
+        capture_local_variables: true,
+        tracepoint_sample_rate: Rails.env.production? ? 0.1 : 1.0,
+        ignored_classes: %w[
+          ActionController::RoutingError
+          AbstractController::ActionNotFound
+          ActionController::UnknownFormat
+          ActionController::InvalidAuthenticityToken
+        ],
+        ignored_user_agents: [/bot/i, /crawler/i, /spider/i],
+        retention_period: 90.days,
+        backtrace_lines_limit: 50,
+        middleware_ignore_paths: [],
+        user_method: :current_user,
+        register_rails_error_subscriber: false,
+        notify: true,
+        before_track: nil,
+        after_track: nil,
+        custom_fingerprint: nil,
+        custom_context: nil
+      }
+
+      # Notification defaults (shared across exception + future perf alerts)
+      @notifications = {
+        enabled: true,
+        app_name: nil,
+        cooldown: 5.minutes,
+        channels: [],
+        rules: {
+          on_first_occurrence: true,
+          on_reopen: true,
+          on_threshold: [10, 50, 100, 500, 1000],
+          critical_classes: [],
+          environments: %w[production]
+        }
+      }
+
+    # Custom setters that deep-merge with defaults (so users only override what they need)
+    def exception_tracking=(overrides)
+      @exception_tracking = @exception_tracking.merge(overrides)
+    end
+
+    def notifications=(overrides)
+      # Deep-merge rules sub-hash if present
+      if overrides.key?(:rules) && @notifications[:rules]
+        overrides = overrides.merge(rules: @notifications[:rules].merge(overrides[:rules]))
+      end
+      @notifications = @notifications.merge(overrides)
+    end
+
+    # Convenience method to add notifier channels
+    def add_notifier(notifier)
+      @notifications[:channels] << notifier
+    end
 
       # Validate defaults eagerly so that a misconfigured initializer raises at
       # boot time rather than at the first request. All SLO defaults are nil so

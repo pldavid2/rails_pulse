@@ -23,7 +23,7 @@
           <% source_lines.each do |lineno, content| %>
             <div class="backtrace__source-line <%= lineno == frame["line"].to_i ? 'backtrace__source-line--current' : '' %>">
               <span class="backtrace__source-lineno"><%= lineno %></span>
-              <span class="backtrace__source-code"><%= content %></span>
+              <span class="backtrace__source-code"><%= format_source_line(content) %></span>
             </div>
           <% end %>
         </div>

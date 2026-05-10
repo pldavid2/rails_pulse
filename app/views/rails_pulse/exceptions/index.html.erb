@@ -1,14 +1,33 @@
 <%= render 'rails_pulse/components/page_header' %>
 
+<%= render 'rails_pulse/components/panel', {} do %>
+  <div class="flex items-center justify-between">
+    <h2 class="grow font-semibold leading-none uppercase text-xs">Occurrences Over Time</h2>
+  </div>
+  <% if @chart_data.any? %>
+    <%
+      chart_series_data = @chart_data.map { |date, count| [Date.parse(date.to_s).to_time.to_i * 1000, count] rescue [date.to_s, count] }
+      chart = { series: [{ name: "Exceptions", type: "bar", data: chart_series_data, color: RailsPulse::ChartColors::DEFAULT }] }
+    %>
+    <%= render_stimulus_chart(chart, type: "bar", id: "exceptions_index_chart") %>
+  <% end %>
+<% end %>
+
 <%= render 'rails_pulse/components/panel', title: 'Exceptions' do %>
   <%= search_form_for @ransack_query, url: exceptions_path, class: "filter-bar" do |form| %>
     <div class="filter-bar__form">
+      <select name="status" onchange="this.form.submit()" class="input">
+        <option value="">All statuses</option>
+        <option value="unresolved" <%= "selected" if params[:status] == "unresolved" %>>Unresolved</option>
+        <option value="resolved" <%= "selected" if params[:status] == "resolved" %>>Resolved</option>
+        <option value="ignored" <%= "selected" if params[:status] == "ignored" %>>Ignored</option>
+      </select>
       <%= form.search_field :exception_class_cont,
         placeholder: "Filter by exception class",
         autocomplete: "off",
         class: "input"
       %>
-      <%= link_to "Reset", exceptions_path, class: "btn btn--plain" if params.has_key?(:q) %>
+      <%= link_to "Reset", exceptions_path, class: "btn btn--plain" if params.has_key?(:q) || params[:status].present? %>
       <%= form.submit "Search", class: "btn" %>
     </div>
   <% end %>

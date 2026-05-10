@@ -1,8 +1,9 @@
 <% columns = [
-  { field: :exception_class, label: 'Exception', cell_class: 'truncate-cell' },
-  { field: :last_seen_at,    label: 'Last Seen',  class: 'w-48' },
-  { field: :first_seen_at,   label: 'First Seen', class: 'w-48' },
-  { field: :occurrence_count, label: 'Count',     class: 'w-24' }
+  { field: :status,           label: 'Status',    class: 'w-24' },
+  { field: :exception_class,  label: 'Exception', cell_class: 'truncate-cell' },
+  { field: :last_seen_at,     label: 'Last Seen',  class: 'w-48' },
+  { field: :first_seen_at,    label: 'First Seen', class: 'w-48' },
+  { field: :occurrence_count, label: 'Count',      class: 'w-24' }
 ] %>
 
 <table class="table table-fixed mbs-4">
@@ -11,10 +12,26 @@
   <tbody>
     <% @table_data.each do |group| %>
       <tr>
+        <td class="whitespace-nowrap">
+          <%
+            badge_style = case group.status
+              when "unresolved" then "background: color-mix(in srgb, var(--color-negative) 12%, transparent); border-color: color-mix(in srgb, var(--color-negative) 30%, transparent); color: var(--color-negative);"
+              when "resolved" then "background: color-mix(in srgb, var(--color-positive) 12%, transparent); border-color: color-mix(in srgb, var(--color-positive) 30%, transparent); color: var(--color-positive);"
+              else "background: color-mix(in srgb, var(--color-text-subtle) 12%, transparent); border-color: color-mix(in srgb, var(--color-text-subtle) 30%, transparent); color: var(--color-text-subtle);"
+            end
+          %>
+          <span class="badge" style="font-size: 0.65em; <%= badge_style %>"><%= group.status.upcase %></span>
+        </td>
         <td class="truncate-cell">
           <%= link_to group.exception_class, exception_path(group) %>
           <% if group.message.present? %>
             <div class="text-subtle text-xs truncate"><%= group.message %></div>
+          <% end %>
+          <% if group.respond_to?(:source_location) && group.source_location.present? %>
+            <div class="text-subtle text-xs" style="margin-top: 2px; display: flex; align-items: center; gap: 4px;">
+              <span style="display: inline-block; width: 8px; height: 8px; background: var(--color-border); border-radius: 2px; flex-shrink: 0;"></span>
+              <%= group.source_location %>
+            </div>
           <% end %>
         </td>
         <td class="whitespace-nowrap"><%= human_readable_occurred_at(group.last_seen_at) %></td>

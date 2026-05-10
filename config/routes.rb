@@ -9,8 +9,17 @@ RailsPulse::Engine.routes.draw do
     end
   end
   resources :operations, only: %i[show]
-  resources :exceptions, only: %i[index show] do
-    resources :occurrences, only: %i[show], controller: "exception_occurrences"
+
+  # Exception tracking (upstream design)
+  if RailsPulse.configuration.track_exceptions
+    resources :exceptions, only: %i[index show] do
+      member do
+        post :resolve
+        post :unresolve
+        post :ignore
+      end
+      resources :occurrences, only: %i[show], controller: "exception_occurrences"
+    end
   end
 
   if RailsPulse.configuration.track_jobs

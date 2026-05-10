@@ -34,6 +34,7 @@ module RailsPulse
     # Scopes (optional, for convenience)
     scope :by_type, ->(type) { where(operation_type: type) }
 
+    before_validation :truncate_string_fields
     before_validation :associate_query
 
     def self.ransackable_attributes(auth_object = nil)
@@ -83,6 +84,11 @@ module RailsPulse
       return if request_id.present? || job_run_id.present?
 
       errors.add(:base, "Operation must belong to a request or a job run")
+    end
+
+    def truncate_string_fields
+      self.label = label.to_s.truncate(255, omission: "") if label.to_s.length > 255
+      self.codebase_location = codebase_location.to_s.truncate(255, omission: "") if codebase_location.to_s.length > 255
     end
 
     def associate_query

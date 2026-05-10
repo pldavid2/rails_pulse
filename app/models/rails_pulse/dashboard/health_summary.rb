@@ -14,12 +14,14 @@ module RailsPulse
       end
 
       def to_health_data
-        {
+        data = {
           routes:   route_counts,
           queries:  query_counts,
           jobs:     job_counts,
           storage:  storage_counts
         }
+        data[:errors] = error_counts if RailsPulse.configuration.track_exceptions
+        data
       end
 
       private
@@ -83,6 +85,14 @@ module RailsPulse
         end
 
         { healthy: healthy, slow: slow, critical: critical }
+      end
+
+      def error_counts
+        unresolved = RailsPulse::ExceptionGroup.unresolved.count
+        resolved = RailsPulse::ExceptionGroup.resolved.count + RailsPulse::ExceptionGroup.ignored.count
+        { healthy: resolved, slow: 0, critical: unresolved }
+      rescue
+        { healthy: 0, slow: 0, critical: 0 }
       end
 
       def storage_counts

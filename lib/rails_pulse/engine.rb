@@ -3,10 +3,19 @@ require "rails_pulse/statistics"
 require "rails_pulse/middleware/request_collector"
 require "rails_pulse/middleware/asset_server"
 require "rails_pulse/subscribers/operation_subscriber"
-require "rails_pulse/subscribers/exception_subscriber"
 require "rails_pulse/job_run_collector"
 require "rails_pulse/active_job_extensions"
 require "rails_pulse/extensions/active_record"
+require "rails_pulse/variable_serializer"
+require "rails_pulse/tracepoint_capture"
+require "rails_pulse/subscribers/exception_subscriber"
+require "rails_pulse/subscribers/rails_error_subscriber"
+require "rails_pulse/notifications/base"
+require "rails_pulse/notifications/email"
+require "rails_pulse/notifications/slack"
+require "rails_pulse/notifications/telegram"
+require "rails_pulse/notifications/webhook"
+require "rails_pulse/notifications/resend"
 require "request_store"
 require "rack/static"
 require "ransack"
@@ -110,8 +119,17 @@ module RailsPulse
       RailsPulse::Subscribers::OperationSubscriber.subscribe!
     end
 
-    initializer "rails_pulse.exception_notifications" do
-      RailsPulse::Subscribers::ExceptionSubscriber.subscribe!
+    initializer "rails_pulse.rails_error_subscriber" do
+      if RailsPulse.configuration.exception_tracking[:register_rails_error_subscriber]
+        Rails.error.subscribe(RailsPulse::Subscribers::RailsErrorSubscriber.new)
+      end
+    end
+
+    initializer "rails_pulse.exception_subscriber" do
+      if RailsPulse.configuration.track_exceptions &&
+         RailsPulse.configuration.exception_tracking[:capture_method] == :subscriber
+        RailsPulse::Subscribers::ExceptionSubscriber.subscribe!
+      end
     end
 
     initializer "rails_pulse.active_job" do

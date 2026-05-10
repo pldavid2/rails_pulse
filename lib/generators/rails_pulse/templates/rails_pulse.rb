@@ -119,17 +119,34 @@ RailsPulse.configure do |config|
   # ====================================================================================================
   #                                          EXCEPTION TRACKING
   # ====================================================================================================
-  # When enabled, Rails Pulse captures unhandled exceptions raised during web requests and
-  # background jobs, groups them by class and location, and displays them in the Exceptions tab.
+  # Captures unhandled exceptions, groups by class + location, displays in the Exceptions tab.
+  # Settings are deep-merged with defaults — only override what you need.
 
-  # Enable or disable exception tracking
   config.track_exceptions = true
 
-  # Capture request params with each exception occurrence.
-  # Params are filtered using Rails' filter_parameters config (passwords, tokens, etc. are redacted).
-  # Occurrences with params larger than 10KB after filtering are stored without params.
-  # Set to false to disable entirely, e.g. for strict data-minimization requirements.
-  config.capture_exception_params = true
+  config.exception_tracking = {
+    capture_method: :middleware,         # :middleware (TracePoint, full context) or :subscriber (AS::Notifications, lightweight)
+    capture_params: true,               # filtered via Rails filter_parameters, capped at 10KB
+    capture_local_variables: true,       # TracePoint-based local variable capture at raise site
+    tracepoint_sample_rate: Rails.env.production? ? 0.1 : 1.0,
+    ignored_classes: %w[
+      ActionController::RoutingError
+      AbstractController::ActionNotFound
+      ActionController::UnknownFormat
+      ActionController::InvalidAuthenticityToken
+    ],
+    ignored_user_agents: [/bot/i, /crawler/i, /spider/i],
+    retention_period: 90.days,           # separate from full_retention_period for perf data
+    backtrace_lines_limit: 50,
+    middleware_ignore_paths: [],          # paths to skip exception capture (e.g. ["/health"])
+    user_method: :current_user,          # controller method to extract current user
+    register_rails_error_subscriber: false, # also capture handled exceptions via Rails.error API
+    notify: true                         # trigger notifications on exceptions?
+    # before_track: ->(exception, context) { },
+    # after_track: ->(group, occurrence) { },
+    # custom_fingerprint: ->(exception, context) { { extra_components: [...] } },
+    # custom_context: ->(request, env) { { tenant: request.subdomain } }
+  }
 
   # ====================================================================================================
   #                                            BACKGROUND JOBS
@@ -300,4 +317,30 @@ RailsPulse.configure do |config|
     rails_pulse_queries: 500,                     # Normalized SQL queries (low volume)
     rails_pulse_exception_occurrences: 50000      # Individual exception raises (high volume)
   }
+
+  # ====================================================================================================
+  #                                           NOTIFICATIONS
+  # ====================================================================================================
+  # Shared notification config — used by exception tracking (and future perf alerts).
+  # Supports Email, Slack, Telegram, Webhook, and Resend channels.
+
+  config.notifications = {
+    enabled: true,                       # master toggle for all notifications
+    app_name: nil,                       # shown in emails/messages (defaults to Rails app name)
+    cooldown: 5.minutes,                 # rate-limit per exception group
+    channels: [],                        # notifier instances (use add_notifier below)
+    rules: {
+      on_first_occurrence: true,
+      on_reopen: true,
+      on_threshold: [10, 50, 100, 500, 1000],
+      critical_classes: [],
+      environments: %w[production]
+    }
+  }
+
+  # Add notifier channels:
+  # config.add_notifier RailsPulse::Notifications::Email.new(to: "dev@example.com", from: "errors@example.com")
+  # config.add_notifier RailsPulse::Notifications::Slack.new(webhook_url: "...")
+  # config.add_notifier RailsPulse::Notifications::Telegram.new(bot_token: "...", chat_id: "...")
+  # config.add_notifier RailsPulse::Notifications::Webhook.new(url: "...")
 end

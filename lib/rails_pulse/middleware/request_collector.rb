@@ -33,8 +33,14 @@ module RailsPulse
         controller_action = "#{env['action_dispatch.request.parameters']&.[]('controller')&.classify}##{env['action_dispatch.request.parameters']&.[]('action')}"
         occurred_at = Time.current
 
-        # Process request
-        status, headers, response = @app.call(env)
+        # Process request with optional TracePoint capture for error tracking
+        middleware_capture = RailsPulse.configuration.track_exceptions &&
+                             RailsPulse.configuration.exception_tracking[:capture_method] == :middleware
+        status, headers, response = if middleware_capture
+          RailsPulse::TracepointCapture.with_capture { @app.call(env) }
+        else
+          @app.call(env)
+        end
         duration = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time) * 1000).round(2)
 
         # Collect all tracking data
@@ -58,7 +64,14 @@ module RailsPulse
         RailsPulse::Tracker.track_request(tracking_data)
 
         [ status, headers, response ]
+      rescue Exception => exception
+        # Track the error via middleware (only if middleware capture is active)
+        if middleware_capture && !should_ignore_error?(exception, env)
+          track_error(exception, env)
+        end
+        raise
       ensure
+        RailsPulse::TracepointCapture.clear if middleware_capture
         RequestStore.store[:skip_recording_rails_pulse_activity] = false
         RequestStore.store[:rails_pulse_request_id] = nil
         RequestStore.store[:rails_pulse_operations] = nil
@@ -116,6 +129,67 @@ module RailsPulse
             false
           end
         end
+      end
+
+      def should_ignore_error?(exception, env)
+        path = env["PATH_INFO"].to_s
+        RailsPulse.configuration.exception_tracking[:middleware_ignore_paths].any? { |p| path.start_with?(p) }
+      end
+
+      def track_error(exception, env)
+        request = ActionDispatch::Request.new(env)
+        user = extract_error_user(env)
+        custom_data = extract_custom_error_data(env, request)
+
+        RailsPulse::ExceptionCaptureService.capture(
+          exception,
+          request_url: request.original_url.to_s.truncate(2000),
+          request_method: request.method,
+          request_params: request.params,
+          environment: Rails.env.to_s,
+          local_variables: RailsPulse::TracepointCapture.captured_locals,
+          custom_context: custom_data.presence,
+          request_headers: request.headers,
+          user_agent: request.user_agent,
+          ip_address: request.remote_ip,
+          session_id: request.session&.id&.to_s,
+          user: user
+        )
+      rescue => e
+        Rails.logger.error "[RailsPulse] Error tracking failed: #{e.message}"
+      end
+
+      def extract_error_user(env)
+        # Try Warden (Devise)
+        if env["warden"]&.user
+          return env["warden"].user
+        end
+
+        # Try controller context
+        if env["action_controller.instance"]
+          controller = env["action_controller.instance"]
+          method = RailsPulse.configuration.exception_tracking[:user_method]
+
+          if method && controller.respond_to?(method, true)
+            return controller.send(method)
+          end
+        end
+
+        nil
+      rescue
+        nil
+      end
+
+      def extract_custom_error_data(env, request)
+        config = RailsPulse.configuration
+
+        if config.exception_tracking[:custom_context]
+          config.exception_tracking[:custom_context].call(request, env)
+        else
+          {}
+        end
+      rescue
+        {}
       end
     end
   end
